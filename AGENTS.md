@@ -1,3 +1,9 @@
+---
+kind: daemon
+when: a concrete vacancy needs a tailored ATS-safe CV (PDF, ATS screen, voice check) and a 3-sentence "about me" pitch; also rebuilds the baseline CV after a change in its source of truth
+works-for: domains/career/
+---
+
 # cv-maker — tailors my CV to a vacancy
 
 Tailors my CV to one specific vacancy so it scores as close to 100% as
@@ -128,10 +134,13 @@ From `daemons/cv-maker/tools/` (setup and details: `tools/README.md`):
 ```sh
 node build.js --id <application-id> --bullets <output>/<application-id>/bullets.json
 node preview.js --style serif --bullets <same bullets.json>        # layout gate
-.venv/Scripts/python screen.py <output>/<id>/<cv>.pdf <output>/<id>/job-description.md
-.venv/Scripts/python voice.py  <output>/<id>/<cv>.pdf
-.venv/Scripts/python voice.py  <output>/<id>/about-me.txt
+<py> screen.py <output>/<id>/<cv>.pdf <output>/<id>/job-description.md
+<py> voice.py  <output>/<id>/<cv>.pdf
+<py> voice.py  <output>/<id>/about-me.txt
 ```
+
+`<py>` — the tools' venv Python: `.venv/Scripts/python` on Windows,
+`.venv/bin/python` on macOS / Linux.
 
 - **Layout gate:** 2 pages, text extracts, every employment entry parsed
   (company and dates on one extracted line), no glyph hazards. A style that

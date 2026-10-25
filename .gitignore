@@ -1,0 +1,11 @@
+# my paths (template: .env.example)
+.env
+
+# tool environments
+tools/.venv/
+node_modules/
+__pycache__/
+
+# my local notes next to the charter
+*.local.*
+CV-STYLE-REPORT.md
