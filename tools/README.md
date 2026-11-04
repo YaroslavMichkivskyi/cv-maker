@@ -42,6 +42,8 @@ its baseline bullets. Optional keys, for one application only:
   line. Unknown labels throw; no new lines can be added.
 - `_location` and `_phone` — replace those two header fields. Set them
   together. Name, email and profile links stay locked.
+- `_consent` — one plain-text line (e.g. a GDPR data-processing consent a
+  posting asks for) printed after SKILLS. `serif` style only.
 
 Everything else in `resume.data.json` is locked and unreachable from a bullets
 file. `resume.data.json` is never modified by a build.

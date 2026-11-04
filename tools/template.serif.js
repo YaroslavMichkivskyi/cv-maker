@@ -287,6 +287,9 @@ section { break-inside: avoid; }
 }
 
 .skills b { font-weight: bold; color: var(--ink); }
+
+/* optional per-application consent line (_consent) */
+.consent { margin-top: 14px; font-size: 9.5px; line-height: 13px; color: var(--muted); }
 `
 
 function render(data, knobs) {
@@ -405,6 +408,7 @@ function render(data, knobs) {
       ${skillLines}
     </div>
   </section>
+  ${data.consent ? `<p class="consent">${esc(data.consent)}</p>` : ''}
 </body>
 </html>
 `

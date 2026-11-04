@@ -265,7 +265,21 @@ function applyBullets(data, overridePath) {
   applySkillsOverride(data, raw._skills)
   applyLocationOverride(data, raw._location)
   applyPhoneOverride(data, raw._phone)
+  applyConsentOverride(data, raw._consent)
   return data
+}
+
+/**
+ * Adds a one-line data-processing consent at the very end of the CV, for one
+ * application only -- some postings (often EU / GDPR) ask for it in the resume.
+ * Plain text, rendered after SKILLS; nothing else on the page changes.
+ */
+function applyConsentOverride(data, consent) {
+  if (consent === undefined) return
+  if (typeof consent !== 'string' || !consent.trim()) {
+    throw new Error('_consent must be a non-empty string.')
+  }
+  data.consent = consent.trim()
 }
 
 /**
