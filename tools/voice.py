@@ -79,7 +79,10 @@ def load(path):
     if path.suffix.lower() == ".pdf":
         from pypdf import PdfReader
 
-        return "\n".join(p.extract_text() or "" for p in PdfReader(str(path)).pages)
+        text = "\n".join(p.extract_text() or "" for p in PdfReader(str(path)).pages)
+        # The template sets list markers as U+2022 on purpose (parsers find
+        # bullets by that glyph); only a bullet inside a sentence is a hit.
+        return re.sub(r"(?m)^\s*•\s*", "", text)
     return path.read_text(encoding="utf8")
 
 

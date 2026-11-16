@@ -123,6 +123,8 @@ ALIASES = {
     "html-templates": ["html template"],
     "enterprise": ["enterprise"],
     "saas": ["saas"],
+    # A posting asking for "cloud" is met by any named provider.
+    "cloud": ["cloud", "aws", "gcp", "azure", "google cloud"],
     "bullmq": ["bullmq", "bull queue"],
     "admin-tools": ["admin tool", "admin panel", "back office"],
     "prototyping": ["prototyp", "proof of concept"],
@@ -343,6 +345,15 @@ ALIASES = {
                               "observability", "monitoring"],
 }
 
+# Qualities, not technologies. No keyword filter screens on these: a recruiter or
+# an LLM screener judges them from what the bullets show. They are reported on
+# their own line and never counted as missed hard requirements.
+SOFT_TERMS = {
+    "ownership", "feature-ownership", "best-practices", "cross-functional",
+    "onboarding", "clean-code", "scalability", "autonomy", "mentorship",
+    "pair-programming", "code-review", "agile", "scrum",
+}
+
 # Lines that read like a hard requirement rather than a nice-to-have.
 REQUIRED_HINT = re.compile(
     r"\b(must|required|requirement|minimum|at least|you have|we require|essential|"
@@ -526,17 +537,33 @@ def check_parse(pages, raw, text):
     if chars < 500:
         print("   !! almost no text -- the file is an image, an ATS sees nothing")
 
+    # Parsers take the location and work status from the header block, so only
+    # the lines above the first section heading are searched. Searching the
+    # whole text "found" a location in "TypeScript, React".
+    header = header_block(raw)
+    title = header_title(header)
+    # The name and the title line are not where a location lives, and a title
+    # listing "TypeScript, React" would read as "City, Country".
+    contact_lines = "\n".join(
+        l for l in header.splitlines()[1:] if l != title
+    )
     fields = {
         "email": re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", raw),
         "phone": re.search(r"\+?\d[\d ()-]{7,}\d", raw),
         "linkedin": re.search(r"linkedin", text),
         "github": re.search(r"github", text),
-        "location": re.search(r"[A-Z][a-z]+(?:-[A-Z][a-z]+)*,\s*[A-Z][a-z]+", raw),
+        "title": title,
+        "location": re.search(r"[A-Z][a-z]+(?:[- ][A-Z][a-z]+)*,\s*[A-Z][a-z]+", contact_lines),
+        "work status": re.search(
+            r"(?:right to work|work authori[sz]ation|work permit|eu citizen|"
+            r"no (?:visa )?sponsorship)[^|\n]*", header, re.I),
     }
     for name, hit in fields.items():
         mark = "ok  " if hit else "MISS"
-        value = hit.group(0).strip() if hit else "not found"
+        value = (hit if isinstance(hit, str) else hit.group(0)).strip() if hit else "not found"
         print(f"   {mark} {name:<16} {value}")
+    if not fields["location"]:
+        print("      no location in the header: location / country filters cannot place you")
 
     print()
     sections = ["professional summary", "experience", "education", "skills"]
@@ -551,7 +578,13 @@ def check_parse(pages, raw, text):
         r"((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w* \d{4}|Present)",
         re.M,
     )
-    jobs = span.findall(raw)
+    # Entries under PROJECTS are personal work, not employment: listed apart and
+    # kept out of the years, which is what a years filter is compared against.
+    cut = re.search(r"^\s*PROJECTS\s*$", raw, re.M)
+    end_proj = re.search(r"^\s*EDUCATION\s*$", raw, re.M)
+    work_raw = raw if not cut else raw[: cut.start()] + (raw[end_proj.start():] if end_proj else "")
+    jobs = span.findall(work_raw)
+    projects = span.findall(raw[cut.start(): end_proj.start() if end_proj else None]) if cut else []
     print()
     print(f"   {len(jobs)} employment entries parsed:")
     # Both ends are inclusive ("Jan 2023 - May 2023" is 5 months), and a month
@@ -563,6 +596,10 @@ def check_parse(pages, raw, text):
         covered.update(range(s, e + 1))
         bounds.append((s, e))
         print(f"        {company.strip():<28} {start} - {end}   ({(e - s + 1) / 12:.1f} yr)")
+    for company, start, end in projects:
+        print(f"        (project) {company.strip():<18} {start} - {end}   not counted")
+    global PARSED_MONTHS
+    PARSED_MONTHS = len(covered)
     if bounds:
         months = len(covered)
         print(f"   {months / 12:.1f} years of parsed experience"
@@ -580,7 +617,41 @@ def check_parse(pages, raw, text):
         print("      keywords containing these will not match a literal search")
     else:
         print("   ok   no ligature or exotic-glyph hazards")
+
+    # Skill extractors map bare acronyms to the wrong taxonomy entry (Affinda,
+    # 2026-11-16: MCP -> Microsoft Certified Professional, ADRs -> Adverse Drug
+    # Reactions). Spelling the term out once next to it fixes that.
+    for short, full in AMBIGUOUS_ACRONYMS.items():
+        if re.search(rf"\b{short}s?\b", raw) and not re.search(full, raw, re.I):
+            print(f"   !! '{short}' never spelled out ('{full}'): parsers may read it as something else")
     print()
+
+
+# Acronym -> the spelled-out form that must appear somewhere in the CV.
+AMBIGUOUS_ACRONYMS = {
+    "MCP": r"model context protocol",
+    "ADR": r"architecture decision record",
+}
+
+PARSED_MONTHS = 0
+SECTION_HEADINGS = re.compile(
+    r"^\s*(PROFESSIONAL SUMMARY|SUMMARY|KEY ACHIEVEMENTS|EXPERIENCE|PROJECTS|EDUCATION|SKILLS)\s*$",
+    re.M,
+)
+
+
+def header_block(raw):
+    """Everything above the first section heading."""
+    m = SECTION_HEADINGS.search(raw)
+    return raw[: m.start()] if m else "\n".join(raw.splitlines()[:4])
+
+
+def header_title(header):
+    """The line under the name naming the role, if there is one."""
+    for line in header.splitlines()[1:4]:
+        if re.search(r"\b(engineer|developer|programmer|architect)\b", line, re.I) and "@" not in line:
+            return line
+    return None
 
 
 def to_month(label):
@@ -678,6 +749,8 @@ def screen(jd_raw, text, vocab):
     if not required:
         print("   no lines in the posting read as hard requirements")
         print("   (no 'must have', 'required', 'N+ years' phrasing found)")
+    soft = required & SOFT_TERMS
+    required = required - SOFT_TERMS
     met = sorted(t for t in required if present(t, text))
     gap = sorted(t for t in required if not present(t, text))
     for t in met:
@@ -686,10 +759,17 @@ def screen(jd_raw, text, vocab):
         print(f"   MISS {t}   <- screened out on a strict filter")
     if required:
         print(f"\n   {len(met)}/{len(required)} hard requirements evidenced in the CV")
+    if soft:
+        print(f"   qualities asked for (judged from the bullets, not filtered): "
+              f"{', '.join(sorted(soft))}")
 
     years = find_years(jd_raw)
     if years:
-        print(f"   posting asks for {years} years")
+        low = int(re.match(r"\d+", years).group(0))
+        have = PARSED_MONTHS / 12
+        mark = "ok  " if have + 1e-9 >= low else "MISS"
+        print(f"   {mark} posting asks for {years} years; dates in the CV add up to "
+              f"{PARSED_MONTHS // 12} yr {PARSED_MONTHS % 12} mo")
 
     print()
     print("3. KEYWORDS -- coverage of the posting's vocabulary")

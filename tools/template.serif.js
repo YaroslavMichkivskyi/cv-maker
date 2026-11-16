@@ -57,7 +57,9 @@ const KNOBS = {
   summaryTop: 10,     // summary underline -> first paragraph
   jobsTop: 12,        // EXPERIENCE underline -> first company
   roleTop: 7,         // company -> job title
-  bulletsTop: 8,      // job title -> first bullet
+  bulletsTop: 4,      // job title -> first bullet; at 8 the gap crossed the
+                      // 1.4 x line-gap threshold parsers (OpenResume) use to
+                      // start a new entry, splitting a job from its bullets
   jobGap: 16,         // last bullet of a job -> next company
   educationTop: 11,   // EDUCATION underline -> degree line
   skillsTop: 10,      // SKILLS underline -> first skill line
@@ -116,12 +118,33 @@ html, body {
   border-bottom: 0.75px solid var(--rule);
 }
 
+/* Role headline under the name: the first thing a recruiter and a parser
+   look for. Plain text, same ink, one size below the name. */
+.title {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 17px;
+  color: var(--ink);
+}
+
+/* Location and work status: its own line so a parser reads it as the
+   candidate's location rather than a skill list. */
+.details {
+  margin-top: 2px;
+  font-size: 10.5px;
+  line-height: 15.75px;
+  color: var(--muted);
+}
+.details .sep { color: var(--rule); padding: 0 10px; }
+
 .contact {
   margin-top: 8px;
   font-size: 10.5px;
   line-height: 15.75px;
   color: var(--muted);
 }
+
+.contact.links { margin-top: 0; }
 
 .contact .sep {
   color: var(--rule);
@@ -163,6 +186,15 @@ section { break-inside: avoid; }
    same gap as every other section; PROJECTS may break like EXPERIENCE. */
 #highlights, #projects { margin-top: ${K.expGap}px; }
 #projects { break-inside: auto; }
+/* A section heading never ends a page on its own: it goes over with the first
+   entry under it. */
+h2 { break-after: avoid-page; }
+.jobs > .job:first-child .job-head { break-before: avoid-page; }
+/* The first entry may break between its bullets, so the heading, the entry
+   head, its role and first bullet can close page 1 instead of the whole
+   section moving over and leaving the heading at the top of page 2 (where
+   some parsers glue it to the previous line and lose the section). */
+.job ul > li:first-child { break-before: avoid-page; }
 #education  { margin-top: ${K.eduGap}px; }
 #skills     { margin-top: ${K.skillsGap}px; }
 
@@ -238,20 +270,20 @@ section { break-inside: avoid; }
 
 .job li + li { margin-top: 4px; }
 
-/* 3px vector disc, centred at x=6.5 and 2.5px above the baseline — matches the
-   marker geometry in the source PDF. Kept as an inline-block rather than an
-   absolutely positioned box: positioned boxes paint in a later phase, which
-   would emit the bullets after the rest of the page in the PDF content stream
-   and hand ATS parsers the sections out of reading order. */
+/* The marker is a real U+2022 character, not a drawn disc: parsers find where a
+   bullet starts by the glyph in the text layer, and without it every wrapped
+   line comes out as a separate bullet (seen in OpenResume, 2026-11-16).
+   Kept as an inline-block rather than an absolutely positioned box: positioned
+   boxes paint in a later phase, which would emit the bullets after the rest of
+   the page in the PDF content stream and hand ATS parsers the sections out of
+   reading order. */
 .job li::before {
-  content: "";
+  content: "\\2022";
   display: inline-block;
-  width: 2.5px;
-  height: 2.5px;
-  margin: 0 9px 0 4.5px;
-  vertical-align: 1.5px;
-  border-radius: 50%;
-  background: var(--muted);
+  width: 16px;
+  padding-left: 4px;
+  text-indent: 0;
+  color: var(--muted);
 }
 
 /* ---------- education ---------- */
@@ -266,9 +298,19 @@ section { break-inside: avoid; }
   line-height: 13.5px;
 }
 
-.edu-row + .edu-row { margin-top: 6px; }
+/* Degree and school on separate lines: on one line they extract as a single
+   text item ("(in progress) -Kharkiv ...") and a parser finds neither. The
+   gap between degrees is wider than 1.4 x the line gap so each one parses as
+   its own entry. */
+.edu-item + .edu-item { margin-top: 12px; }
 .edu-degree { font-weight: bold; color: var(--ink); }
-.edu-school { color: var(--ink); font-weight: normal; font-style: italic; }
+.edu-school {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 13.5px;
+  color: var(--ink);
+  font-style: italic;
+}
 .edu-dates {
   font-size: 10px;
   color: var(--muted);
@@ -301,9 +343,17 @@ function render(data, knobs) {
   // in header.links is wrapped. Colour and weight are inherited so the styling
   // stays identical to the surrounding text.
   const links = header.links || {}
-  const contact = header.contact
-    .map((c) => (links[c] ? `<a href="${esc(links[c])}">${esc(c)}</a>` : esc(c)))
-    .join('<span class="sep">|</span>')
+  // The visible text is the URL itself (scheme and www dropped), not the word
+  // "LinkedIn": parsers read the text layer, not link annotations.
+  const shortUrl = (u) => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
+  // Profile URLs get their own line: beside the phone and e-mail they wrap
+  // mid-URL, and a broken URL is lost to a parser.
+  const sep = '<span class="sep">|</span>'
+  const contact = header.contact.filter((c) => !links[c]).map(esc).join(sep)
+  const profileLinks = header.contact
+    .filter((c) => links[c])
+    .map((c) => `<a href="${esc(links[c])}">${esc(shortUrl(links[c]))}</a>`)
+    .join(sep)
 
   const summaryParas = summary.paragraphs
     .map(
@@ -352,9 +402,12 @@ function render(data, knobs) {
   // original data shape.
   const eduRows = education.items
     .map(
-      (e) => `<div class="edu-row">
-        <div><span class="edu-degree">${esc(e.degree)} </span><span class="edu-school">${esc(e.school)}</span></div>
-        <span class="edu-dates">${esc(e.dates)}</span>
+      (e) => `<div class="edu-item">
+        <div class="edu-row">
+          <span class="edu-degree">${esc(e.degree.replace(/\s*-\s*$/, ''))}</span>
+          <span class="edu-dates">${esc(e.dates)}</span>
+        </div>
+        <div class="edu-school">${esc(e.school)}</div>
       </div>`
     )
     .join('\n      ')
@@ -373,8 +426,13 @@ function render(data, knobs) {
 <body>
   <header>
     <div class="name">${esc(header.name)}</div>
+    ${header.title ? `<div class="title">${esc(header.title)}</div>` : ''}
     <div class="name-rule"></div>
     <div class="contact">${contact}</div>
+    ${profileLinks ? `<div class="contact links">${profileLinks}</div>` : ''}
+    ${header.details && header.details.length
+      ? `<div class="details">${header.details.map(esc).join('<span class="sep">|</span>')}</div>`
+      : ''}
   </header>
 
   <section>

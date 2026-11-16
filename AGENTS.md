@@ -30,7 +30,10 @@ scripts adapted to Windows. Behaviour otherwise unchanged.
   Missing `.env` or `resume.data.json` → stop and report; never reconstruct
   the CV from memory or from an earlier tailored output.
 - **Reads first:** `$CV_SOURCE_DIR/amendments.md` — conditional skills,
-  header rules, NDA limits, open questions, change log.
+  header rules, NDA limits, open questions, change log. Then, when tailoring,
+  `$CV_SOURCE_DIR/bullet-bank.md` (every approved bullet and achievement in full)
+  and `$CV_SOURCE_DIR/skills-catalog.md` (every skill with the level it may be
+  claimed at). Either missing → work from `resume.data.json` alone.
 - **Output:** the deliverable folder below + a short report to Spiritus.
 - **Tools:** local files and the scripts in `tools/` (`tools/README.md`).
   No e-mail, no sending, no applying, no web forms — submission is
@@ -41,9 +44,17 @@ scripts adapted to Windows. Behaviour otherwise unchanged.
 
 ## The rule
 
-Only the **EXPERIENCE bullets** (and the bullets of the optional PROJECTS
-section, same id-keyed bullets file) are a lever. KEY ACHIEVEMENTS (`highlights`)
-is locked like the summary. Everything else is **LOCKED** and
+The levers, all in the application's `bullets.json`:
+- **EXPERIENCE and PROJECTS bullets** — picked from the bullet bank and
+  shortened; the baseline in `resume.data.json` is only the default.
+- **`_highlights`** — 2-4 KEY ACHIEVEMENTS picked from the bank's achievement
+  pool, the ones this posting cares about most.
+- **`_title`** — the headline under the name, mirroring the posting's role
+  wording (`Backend Engineer · Node.js, NestJS`) as long as it is a role I held.
+- **`_skills`** — any SKILLS line may take items from the skills catalog at the
+  level the catalog states (owner's standing OK, 2026-11-16); log the use.
+
+Everything else is **LOCKED** and
 reproduced verbatim from `resume.data.json`: name and contacts, summary,
 company names, titles, dates and their order, education, skills, section
 headings and order, layout and visual style.
@@ -112,8 +123,11 @@ Only on my explicit request:
    recruiters read the top 2–3.
 5. **Most recent role carries the primary stack** of the target job;
    earlier roles give depth, domain, scale, secondary keywords.
-6. **Keep the shape** — bullet counts close to the baseline, 1–2 lines each,
-   the CV stays two pages.
+6. **Keep it light** — the CV is read in seconds. 3-6 bullets for the latest
+   role, 3-5 for earlier ones, each **at most two printed lines (~200
+   characters)**; 2-4 achievements; one summary paragraph. Target about 1.5
+   pages, never more than two. A long version of a bullet belongs in the bank,
+   not on the page.
 7. **Achievement, not duty**: strong verb + what was built + technology +
    outcome. Never open two bullets with the same verb.
 8. Tailor per posting — never build one "universal" set (the baseline in
@@ -143,14 +157,27 @@ node preview.js --style serif --bullets <same bullets.json>        # layout gate
 `.venv/bin/python` on macOS / Linux.
 
 - **Layout gate:** 2 pages, text extracts, every employment entry parsed
-  (company and dates on one extracted line), no glyph hazards. A style that
-  stacks the date under the company silently reports zero years.
+  (company and dates on one extracted line), no glyph hazards, and page 2 does
+  not start with a section heading or an entry head (some parsers glue the
+  first line of a page to the last line before it and lose the section). A
+  style that stacks the date under the company silently reports zero years.
+  Page-start failure → make the break fall between two bullets: lengthen or
+  split a bullet just above the break, or shorten earlier ones so the next
+  heading, entry head, role and first bullet fit on page 1.
 - **screen.py** reads the PDF the way a recruiting system does: parse health,
   hard requirements met / missed, keyword coverage with missing terms ranked,
   the first look, a verdict. Iterate on the bullets until the missing list
   holds only things I genuinely haven't done. Coverage is a proxy, not an ATS
   verdict — a gap is something to report, never licence to claim the keyword.
   Keep metered third-party scans (Jobscan, Resume Worded) for the final file.
+  It also checks the header: a role title under the name, a location and a
+  work-status line (parsers take location from the header only), and compares
+  the posting's years bar with what the dates add up to (PROJECTS excluded).
+- **AI screen** — `tools/ai-screen.md`: a fresh subagent reads only the parsed
+  CV text and the posting and answers like an LLM recruiter screen (decision,
+  score, must-haves evidenced / weak / missing, knockouts). Write `.cv.txt` and
+  ask Spiritus to run it if you cannot spawn the subagent yourself. Act on weak
+  must-haves and knockouts; never add a claim because the screener asked.
 - **voice.py** — must be clean before anything ships (see below).
 - Locked section changed → `node migrate-style.js` rebuilds every application
   from its own `bullets.json` and reports any that stop fitting.
@@ -195,6 +222,7 @@ the same shape.
 - `bullets.used.json` — written by `build.js`
 - `$CV_FILE_NAME` — the tailored CV, written by `build.js`
 - `about-me.txt` — the three-sentence pitch
+- `.cv.txt` + `ai-screen.md` — the parsed text and the simulated LLM screen
 
 Rebuilding an existing application (or the baseline, or amending the master
 files) → first move the current versions to `archive/` next to them as

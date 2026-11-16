@@ -88,6 +88,8 @@ function freshData(bullets, lang) {
  *      screen.py's employment regex needs `Company  Mon YYYY - Mon YYYY`
  *      together or it reports zero years of experience
  *   4. no fi/fl ligatures or exotic glyphs in the text layer
+ *   5. no page starts with a section heading (lost at the page join by
+ *      parsers that add no line break there)
  */
 function gate(pdfPath) {
   const py = venvPython()
@@ -111,6 +113,15 @@ if len(pages) != 2: fails.append(f"{len(pages)} pages, expected 2")
 if len(raw.strip()) < 500: fails.append("almost no extractable text")
 if len(jobs) != ${nJobs}: fails.append(f"{len(jobs)} employment entries parsed, expected ${nJobs}")
 if haz: fails.append("glyph hazards: " + ", ".join(repr(c) for c in haz))
+# Some parsers (OpenResume) put no line break at a page boundary, so a section
+# heading that opens page 2 is glued to the last line of page 1 and its whole
+# section is lost (PROJECTS read as jobs). Move a bullet or trim instead.
+for i, p in enumerate(pages[1:], start=2):
+    first = next((l.strip() for l in p.splitlines() if l.strip()), "")
+    if re.fullmatch(r"[A-Z][A-Z &/()-]{2,}", first):
+        fails.append(f"page {i} starts with section heading {first!r}")
+    elif span.match(first):
+        fails.append(f"page {i} starts with an entry head {first[:40]!r}; break between bullets instead")
 print(f"   pages {len(pages)}  chars {len(raw.strip())}  employment entries {len(jobs)}")
 for c, s, e in jobs:
     print(f"     {c.strip()[:34]:<34} {s} - {e}")

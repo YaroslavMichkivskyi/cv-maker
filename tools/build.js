@@ -263,6 +263,8 @@ function applyBullets(data, overridePath) {
   }
 
   applySkillsOverride(data, raw._skills)
+  applyHighlightsOverride(data, raw._highlights)
+  applyTitleOverride(data, raw._title)
   applyLocationOverride(data, raw._location)
   applyPhoneOverride(data, raw._phone)
   applyConsentOverride(data, raw._consent)
@@ -297,6 +299,32 @@ function applyPhoneOverride(data, phone) {
 }
 
 /**
+ * Per-application KEY ACHIEVEMENTS: 2-4 items picked (and shortened) from the
+ * bullet bank, so the top of page one leads with what this posting cares about.
+ */
+function applyHighlightsOverride(data, items) {
+  if (items === undefined) return
+  if (!Array.isArray(items) || items.length < 1 || items.length > 4 ||
+      items.some((b) => typeof b !== 'string' || !b.trim())) {
+    throw new Error('_highlights must be an array of 1-4 non-empty strings.')
+  }
+  if (!data.highlights) data.highlights = { heading: 'KEY ACHIEVEMENTS', items: [] }
+  data.highlights.items = items
+}
+
+/**
+ * Per-application headline under the name, e.g. to mirror the posting's title
+ * ("Backend Engineer · Node.js, NestJS"). Must stay a role I actually held.
+ */
+function applyTitleOverride(data, title) {
+  if (title === undefined) return
+  if (typeof title !== 'string' || !title.trim()) {
+    throw new Error('_title must be a non-empty string.')
+  }
+  data.header.title = title.trim()
+}
+
+/**
  * Overrides the location shown in the header, for one application only.
  *
  * Local-market postings may want a different address than the master header.
@@ -306,6 +334,11 @@ function applyLocationOverride(data, location) {
   if (location === undefined) return
   if (typeof location !== 'string' || !location.trim()) {
     throw new Error('_location must be a non-empty string.')
+  }
+  // A header with a details line keeps the location as its first item.
+  if (Array.isArray(data.header.details) && data.header.details.length) {
+    data.header.details[0] = location
+    return
   }
   // The master header may carry no location at all; then the override is
   // appended instead of replacing the last entry (which would be a link).
